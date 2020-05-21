@@ -1,104 +1,92 @@
-#******************************************************************
-#Step 0. Downloading and unzipping dataset
-#******************************************************************
+## This function reads the data from some text file, cleans them, merges them and produce average of some columns and 
 
-if(!file.exists("./data")){dir.create("./data")}
-#Here are the data for the project:
-fileUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
-download.file(fileUrl,destfile="./data/Dataset.zip")
+## stores them in a file named output.txt
 
-# Unzip dataSet to /data directory
-unzip(zipfile="./data/Dataset.zip",exdir="./data")
 
-#You should create one R script called run_analysis.R that does the following.
 
-#******************************************************************
-#Step 1.Merges the training and the test sets to create one data set.
-#******************************************************************
+run_analysis <- function() {
+    source("load_data.R")
+    downloaddata()
+    library(dplyr)
+    
+    ## pre processing begins
+    #reading train and test data 
+  
+  
+    train_data <- tbl_df(read.csv("data/SamsungData/UCI\ HAR\ Dataset/train/X_train.txt" , sep=" ", header = FALSE))
+    test_data <- read.csv("data/SamsungData/UCI\ HAR\ Dataset/test/X_test.txt", sep = " ", header = FALSE)
+    features <-  read.csv("data/SamsungData/UCI\ HAR\ Dataset/features.txt" , sep=" ", header = FALSE)
+    
+    #reading labels data
+  
+  
+    train_labels <- read.csv("data/SamsungData/UCI\ HAR\ Dataset/train/y_train.txt" , sep=" ", header = FALSE)
+    test_labels <- read.csv("data/SamsungData/UCI\ HAR\ Dataset/test/y_test.txt", sep = " ", header = FALSE)
+    activity_labels <- read.csv("data/SamsungData/UCI\ HAR\ Dataset/activity_labels.txt" , sep=" ", header = FALSE)
+    
+    #subjects data
+  
+  
+    train_subjects <- tbl_df(read.csv("data/SamsungData/UCI\ HAR\ Dataset/train/subject_train.txt" , sep=" ", header = FALSE))
+    test_subjects <- read.csv("data/SamsungData/UCI\ HAR\ Dataset/test/subject_test.txt", sep = " ", header = FALSE)
+    
+    #setting some column names
+  
+  
+    colnames(test_labels) <- c("activity")
+    colnames(train_labels) <- c("activity")
+    colnames(activity_labels) <- c("activityId", "activityName")
+    colnames(train_subjects) <- c("subjectId")
+    colnames(test_subjects) <- c("subjectId")
+    colnames(train_data) <- c(features[,2])
+    colnames(test_data) <- c(features[,2])
+    
+    ## preprocessing ends
+    
+    #Step 1 part A - merging test/train data with their test/train labels and subjects
+  
+    #Data which has no activity is not of any use, so discarding by taking those many rows 
+  
+    #from data as many present in the labels
+  
+    #note that test_labels and test_subjects has same no of rows
+    test_data <- cbind(test_data[1:nrow(test_labels),] , test_labels , test_subjects)
+    train_data <- cbind(train_data[1:nrow(train_labels),] , train_labels , train_subjects)
+    
+    #Step 1 part B - merging train and test data with columns same as features length and last two columns activity and subject id
+    last_col_test <- ncol(test_data)
+    last_col_train <- ncol(train_data)
+    merged_data <- rbind (train_data[,c(1:nrow(features) , last_col_train -1 , last_col_train)] 
+                          , test_data [,c(1:nrow(features),last_col_test -1 , last_col_test)])
+    
+    
+    #Step 2 keeping only mean and std deviation columns along with activity and subjectid 
+  
+    mean_columns <- grep("mean", names(merged_data))
+    std_columns <- grep("std", names(merged_data))
+    last_col <- ncol(merged_data)
+    req_columns <- append(mean_columns, std_columns )
+    merged_data <- merged_data[,c(req_columns,last_col-1, last_col)]
+    
+    #Step 3 providing descriptive names to the activity in the table
+  
+    merged_data <- mutate(merged_data, activity = activity_labels$activityName[activity])
+    
+    #Step 4 appropriate names for each column in merged_data from features vector
+  
+    #  is already presentreplacing some special characters with _ for better
+  
+    #  readability. Here ().:- has been removed but other special characters 
+  
+    #can also be removed if need be
+  
+    colnames(merged_data) <- gsub("[-().]+","_",colnames(merged_data))
+    colnames(merged_data) <- gsub("^_|_$","",colnames(merged_data))
+    
+    #Step5 finding average of all by subject id and activity and writing into a file
+  
+    final_data <-  merged_data %>% group_by(activity, subjectId) %>% summarise_if(is.numeric, mean, na.rm=TRUE) 
+    write.table(final_data , "data/output.txt", col.names=TRUE, row.names= FALSE,na= "NA" , sep = ",")
+}
 
-# 1.1 Reading files
 
-# 1.1.1  Reading trainings tables:
-
-x_train <- read.table("./data/UCI HAR Dataset/train/X_train.txt")
-y_train <- read.table("./data/UCI HAR Dataset/train/y_train.txt")
-subject_train <- read.table("./data/UCI HAR Dataset/train/subject_train.txt")
-
-# 1.1.2 Reading testing tables:
-x_test <- read.table("./data/UCI HAR Dataset/test/X_test.txt")
-y_test <- read.table("./data/UCI HAR Dataset/test/y_test.txt")
-subject_test <- read.table("./data/UCI HAR Dataset/test/subject_test.txt")
-
-# 1.1.3 Reading feature vector:
-features <- read.table('./data/UCI HAR Dataset/features.txt')
-
-# 1.1.4 Reading activity labels:
-activityLabels = read.table('./data/UCI HAR Dataset/activity_labels.txt')
-
-# 1.2 Assigning column names:
-
-colnames(x_train) <- features[,2]
-colnames(y_train) <-"activityId"
-colnames(subject_train) <- "subjectId"
-
-colnames(x_test) <- features[,2] 
-colnames(y_test) <- "activityId"
-colnames(subject_test) <- "subjectId"
-
-colnames(activityLabels) <- c('activityId','activityType')
-
-#1.3 Merging all data in one set:
-
-mrg_train <- cbind(y_train, subject_train, x_train)
-mrg_test <- cbind(y_test, subject_test, x_test)
-setAllInOne <- rbind(mrg_train, mrg_test)
-
-#dim(setAllInOne)
-#[1] 10299   563
-
-#******************************************************************
-#Step 2.-Extracts only the measurements on the mean and standard deviation for each measurement.
-#******************************************************************
-
-#2.1 Reading column names:
-
-colNames <- colnames(setAllInOne)
-
-#2.2 Create vector for defining ID, mean and standard deviation:
-
-mean_and_std <- (grepl("activityId" , colNames) | 
-                   grepl("subjectId" , colNames) | 
-                   grepl("mean.." , colNames) | 
-                   grepl("std.." , colNames) 
-)
-
-#2.3 Making nessesary subset from setAllInOne:
-
-setForMeanAndStd <- setAllInOne[ , mean_and_std == TRUE]
-
-#******************************************************************
-#Step 3. Uses descriptive activity names to name the activities in the data set
-#******************************************************************
-
-setWithActivityNames <- merge(setForMeanAndStd, activityLabels,
-                              by='activityId',
-                              all.x=TRUE)
-
-#******************************************************************
-#Step 4. Appropriately labels the data set with descriptive variable names.
-#******************************************************************
-
-#Done in previous steps, see 1.3,2.2 and 2.3!
-
-#******************************************************************
-#Step 5. From the data set in step 4, creates a second, independent tidy data set with the average of each variable for each activity and each subject.
-#******************************************************************
-
-#5.1 Making a second tidy data set
-
-secTidySet <- aggregate(. ~subjectId + activityId, setWithActivityNames, mean)
-secTidySet <- secTidySet[order(secTidySet$subjectId, secTidySet$activityId),]
-
-#5.2 Writing second tidy data set in txt file
-
-write.table(secTidySet, "secTidySet.txt", row.name=FALSE)
